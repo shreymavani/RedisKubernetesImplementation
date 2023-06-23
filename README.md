@@ -1,13 +1,9 @@
-# Redis
+# Redis On Kubernetes
 
 Here,we are going to dicuss two type of implementation of Redis : 
 
 1. Stand-alone
 2. Cluster
-
-# Redis Standalone Mode Guide
-
-This guide provides step-by-step instructions for using Redis in standalone mode.
 
 ## Prerequisites
 
@@ -15,6 +11,11 @@ Before you begin, ensure you have the following:
 
 - Kubernetes cluster up and running
 - kubectl command-line tool configured to access your Kubernetes cluster
+- Download those yaml files and put it into a directory and open a terminal in that directory
+
+# Redis Standalone Mode Guide
+
+This guide provides step-by-step instructions for using Redis in standalone mode.
 
 ## Deployment Steps
 
@@ -22,17 +23,20 @@ Follow these steps to use Redis in standalone mode:
 
 1. Start the Redis server by opening a terminal and running the following command:
 
-This will start the Redis server on the default port (6379). If you want to use a different port, specify it using the `--port` option:
+- This will start the Redis server on the default port (6379). If you want to use a different port, specify it using the `--port` option:
 
-      
-2. Once the Redis server is running, you can interact with it using the Redis CLI (command line interface). Open another terminal and run the following command:
+        kubectl apply -f redis-deployment.yaml
 
+        kubectl apply -f redis-service.yaml
 
-The Redis CLI will connect to the Redis server.
+## Usage
+1. Once the Redis server is running, you can interact with it using the Redis CLI (command line interface). Open another terminal and run the following command:
 
-- Use this command to connect with Redis server : redis-cli -h <bindServer> -p <port>  (Use -h <bindServer> if accessing from external Server)
+- The Redis CLI will connect to the Redis server.
 
-3. You can now start using Redis commands in redis-cli. Here are a few examples:
+        kubectl exec -it redis-deployment-name sh -- redis-cli
+
+2. You can now start using Redis commands in redis-cli. Here are a few examples:
 
 - Set a key-value pair:
 
@@ -56,106 +60,47 @@ The Redis CLI will connect to the Redis server.
 Feel free to explore the Redis documentation for a comprehensive list of available commands and their usage.
 
 4. To exit the Redis CLI, type `exit` or press `Ctrl+C`.
+   
+## Clean up
 
-## Configuration
+1. Clean up 
 
-Redis provides various configuration options that you can customize based on your needs. By default, Redis uses a configuration file named `redis.conf`. You can modify this file to adjust settings like port number, persistence, security, and more.
+       kubectl delete -f redis-deployment.yaml
 
-To modify the Redis configuration:
-
-- If using docker image,mount the redis.conf file : docker run -v /path/to/file/redis.conf:/usr/local/etc/redis/redis.conf -d --name myredis redis redis-server /usr/local/etc/redis/redis.conf
-
-1. Locate the `redis.conf` file in your Redis installation directory.
-
-2. Open the file in a text editor.
-
-3. Make the necessary changes to the configuration parameters. Refer to the Redis documentation for detailed explanations of each configuration option.
-
-4. Save the `redis.conf` file.
-
-5. Restart the Redis server for the changes to take effect.
-
-
+       kubectl delete -f redis-service.yaml
 
 # Redis Cluster Mode Guide
 
 This guide provides step-by-step instructions for using Redis in cluster mode.
 
-## Configuration
+## Deployment Steps
 
-1. Download Docker image
-            
-    Use the following command to pull docker image:`docker pull redis`
+Follow these steps to use Redis in standalone mode:
 
+1. Start the Redis server by opening a terminal and running the following command:
 
-    For cluster, we are using six instances of Redis running, out of which three will be Master nodes and the other three will be Slave nodes. (We don’t need to specify them explicitly).  
-        
-2. Prepare Redis.conf file 
+        kubectl apply -f redis-deployment.yaml
 
-    So, we will be creating six folders, each having a ‘redis.conf’ file, that will be used to create docker instances. Use this command to do so:
+        kubectl apply -f redis-service.yaml
+  
+3. Deploy Redis Cluster
 
-        mkdir 7000 7001 7002 7003 7004 7005
+- To do this, we run the following command and type yes to accept the configuration. The first three nodes become masters, and the last three become slaves.
 
+        kubectl exec -it redis-cluster-0 -- redis-cli --cluster create --cluster-replicas 1 $(kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP}:6379 ')
 
-    Note: These folders are names to identify which port are we going to provide to the Redis node.
+ *OR*
 
+- If above command won't work or throw some error,follow below given commands.
 
+      kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP} '
 
-    Now, in each folder created above, we will add redis.conf file, which will look like this:
+- Above command provides you the ipAddress of all running instances on kubernetes.After that execute the below given command :
 
-        port 7000 
-        cluster-enabled yes
-        cluster-config-file nodes.conf 
-        cluster-node-timeout 5000 
-        appendonly yes 
-        bind <server-IP>
+      kubectl exec -it redis-cluster-0 sh -- redis-cli --cluster create server-IP1:6379 server-IP2:6379 server-IP3:6379 server-IP4:6379 server-IP5:6379 server-IP6:6379  --cluster-replicas 1
 
-
-    A few points to Note: 
-
-    Remember to keep this port same as the folder name. For e.g. In folder 7001, the port will be 7001, in folder 7002, the port will be 7002 and so on.
-    This `server-IP` must be replaced by the IP of the server we are using. This is to make our Redis instance accessible from the outside, where that server is also accessible.
-
-
-    We are now ready with our minimal setup for creating our cluster. Let’s start the docker containers.
-
-3. Start Docker containers    
-
-    We will be starting the docker containers using the docker image downloaded in step 1. Use the following commands:
-
-        docker run -v <folder-path>/7000/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-0 redis redis-server /usr/local/etc/redis/redis.conf
-        docker run -v <folder-path>/7001/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-1 redis redis-server /usr/local/etc/redis/redis.conf
-        docker run -v <folder-path>/7002/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-2 redis redis-server /usr/local/etc/redis/redis.conf
-        docker run -v <folder-path>/7003/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-3 redis redis-server /usr/local/etc/redis/redis.conf
-        docker run -v <folder-path>/7004/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-4 redis redis-server /usr/local/etc/redis/redis.conf
-        docker run -v <folder-path>/7005/redis.conf:/usr/local/etc/redis/redis.conf -d --net=host --name myredis-5 redis redis-server /usr/local/etc/redis/redis.conf
-
-    Please note:
-
-        <folder-path> must be an absolute path.
-        There must be proper permissions to read these ‘redis.conf’ files. Permissions can be set using command chmod 755 <file name>. We need sudo access to set permissions here.
-        We have six docker containers running till here. The list of which can be obtained using the command: docker ps | grep redis
-
-4. Create a cluster using Redis nodes
-
-    Now, we will create a Redis cluster using the Redis nodes we have just started. For this, we need redis-cli. Well, this redis-cli is itself present inside the redis nodes we have created.
-
-
-
-    So, we will open shell from any of the docker containers just created above, using this command:
-        docker exec -it container-id sh
-
-    We will create the cluster using the command:
-
-        redis-cli --cluster create server-IP:7000 server-IP:7001 server-IP:7002 server-IP:7003 server-IP:7004 server-IP:7005 --cluster-replicas 1
-
-
-    Please note:
-
-    server-IP will be the same as that mentioned in the redis.conf file above.
-    --cluster-replicas 1 will create three nodes as master nodes and the other three as their slave nodes.
-
-
+Note: server-IP1, server-IP2,...,server-IP6 is the output of this `kubectl get pods -l app=redis-cluster -o jsonpath='{range.items[*]}{.status.podIP} '` command.
+  
     Within a few seconds, if everything is fine, a message will be displayed saying:
 
         [OK] All nodes agree about slots configuration.
@@ -164,7 +109,7 @@ This guide provides step-by-step instructions for using Redis in cluster mode.
         [OK] All 16384 slots covered.
 
 
-    Our Redis cluster is now up and running on ports 7000, 7002, 7002, 7003, 7004, and 7005.
+    Our Redis cluster is now up and running on 6 different instances.
 
 ## Usage 
 
@@ -174,19 +119,20 @@ Follow these steps to use Redis in cluster mode:
 
 The Redis CLI will connect to the Redis server.
 
-- Use this command to connect with Redis server : redis-cli -c -h `bindServer` -p `port`  (Use -h `bindServer` if accessing from external Server)
+- Use this command to connect with Redis server :
+
+        kubectl exec -it redis-cluster-0 sh -- redis-cli -c -h ipOfAnyOneInstance -p 6379  (Use -h flag if accessing from external Server)
 
 2. You can now start using Redis commands in redis-cli. Here are a few examples:
 
    Remember to use the ASKING command before each CRUD operation to ensure the request is directed to the correct node based on key hashing.
 
    Example : 
-    
-        redis-cli -c -p 7000
-        127.0.0.1:7000> Asking
+
+        127.0.0.1:6379> Asking
         OK
-        127.0.0.1:7000> SET key value
-        -> Redirected to slot [12539] located at 127.0.0.1:7002
+        127.0.0.1:6379> SET key value
+        -> Redirected to slot [12539] located at ipOfAnyOfOneInstance:6379
     
 
 - Set a key-value pair:
@@ -212,6 +158,21 @@ Feel free to explore the Redis documentation for a comprehensive list of availab
 
 3. To exit the Redis CLI, type `exit` or press `Ctrl+C`.
 
+
+# Clean Up
+
+1. Clean up 
+
+       kubectl delete -f redis-statefulset.yaml
+
+       kubectl delete -f redis-service.yaml
+
+      kubectl delete pvc data-redis-cluster-0
+      kubectl delete pvc data-redis-cluster-1
+      kubectl delete pvc data-redis-cluster-2
+      kubectl delete pvc data-redis-cluster-3
+      kubectl delete pvc data-redis-cluster-4
+      kubectl delete pvc data-redis-cluster-5
 
 ## Conclusion
 
